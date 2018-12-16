@@ -1,44 +1,44 @@
 #include "addFunctions.h"
 int retPos(int p, int * x, int * y){
-	if (p > 8 || p < 0)
-		return -1;
-	switch (p){
-		case 0:
-		*x = 2;
-		*y = 2;
-		break;
-		case 1:
-		*x = 11;
-		*y = 2;
-		break;
-		case 2:
-		*x = 20;
-		*y = 2;
-		break;
-		case 3:
-		*x = 2;
-		*y = 11;
-		break;
-		case 4:
-		*x = 11;
-		*y = 11;
-		break;
-		case 5:
-		*x = 20;
-		*y = 11;
-		break;
-		case 6:
-		*x = 2;
-		*y = 20;
-		break;
-		case 7:
-		*x = 11;
-		*y = 20;
-		break;
-		case 8:
-		*x = 20;
-		*y = 20;
-		break;
+    if (p > 8 || p < 0)
+        return -1;
+    switch (p){
+		    case 0:
+		        *x = 2;
+		        *y = 2;
+		        break;
+		    case 1:
+		        *x = 11;
+		        *y = 2;
+		        break;
+		    case 2:
+        		*x = 20;
+        		*y = 2;
+        		break;
+		    case 3:
+        		*x = 2;
+        		*y = 11;
+        		break;
+		    case 4:
+        		*x = 11;
+        		*y = 11;
+        		break;
+		    case 5:
+        		*x = 20;
+        		*y = 11;
+        		break;
+		    case 6:
+        		*x = 2;
+        		*y = 20;
+        		break;
+		    case 7:
+        		*x = 11;
+        		*y = 20;
+        		break;
+		    case 8:
+        		*x = 20;
+        		*y = 20;
+        		break;
 		}
 		return 0;
 }
@@ -84,6 +84,15 @@ void printCursor(struct cursor c, struct board sb){
 void printSym(const struct cursor c, int p1, struct board * sb){
   if (sb->b[c.p] == 0){
     sb->b[c.p] = p1;
+  }
+}
+
+void printChat(char ** chat, int messages){
+  mt_gotoXY(30, 1);
+  printf("Chat:");
+  for (int i = 0; i < messages; i++){
+    mt_gotoXY(30, i + 2);
+    printf("%s", chat[i]);
   }
 }
 
@@ -160,18 +169,21 @@ int connectToServer(char * arg, char * s, const char * PORT){
   }
 
   inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr), s, INET6_ADDRSTRLEN);
-  printf("client: connecting to %s\n", s);
   freeaddrinfo(servinfo); // all done with this structure
   return sockfd;
 }
 
 void * recvBoard(void * p){
   struct ft * inf = (struct ft *) p;
+  int createChat = 0;
   while (inf->b->b[9] == 0){
     int rcvbytes = recv(inf->sockfd, inf->b, sizeof(struct board), 0);
     if (rcvbytes == 0){
       printf("Server down...");
       exit(EXIT_FAILURE);
+    }
+    if (createChat == 0){
+      createChat = 1;
     }
     pthread_mutex_lock(inf->mute);
     *(inf->turn) = 1;
@@ -184,4 +196,45 @@ void * recvBoard(void * p){
   }
   printf("End of thread\n");
   return NULL;
+}
+
+const char _CHAT_PORT[5] = "7778";
+
+void * chatThread(void * arg){
+  char remoteIP[40];
+  int sockfd = connectToServer("localhost", remoteIP, _CHAT_PORT);
+  struct ftc * my = (struct ftc *) arg;
+  fd_set readfds;
+  int ret, rcvbytes;
+  struct timeval tv;
+  while (1){
+    FD_ZERO(&readfds);
+    FD_SET(sockfd, &readfds);
+    tv.tv_sec = 2;
+    tv.tv_usec = 0;
+    if (*(my->read) == 1){
+      sleep(1);
+      continue;
+    }
+    if (*(my->read) == 2){
+      send(sockfd, my->message, 60, 0);
+      *(my->read) = 0;
+    }
+    ret = select(sockfd + 1, &readfds, NULL, NULL, &tv);
+    if (ret == -1){
+      printf("Error with select.\n");
+      return NULL;
+    }
+    if (FD_ISSET(sockfd, &readfds)){
+      pthread_mutex_lock(my->mute);
+      rcvbytes = recv(sockfd, my->message, 60, 0);
+      if (rcvbytes == 0){
+        printf("Lost connection with server\n");
+        return NULL;
+      }
+      *(my->read) = 1;
+      pthread_mutex_unlock(my->mute);
+    }
+  }
+  close(sockfd);
 }

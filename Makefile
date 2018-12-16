@@ -11,10 +11,12 @@ readkey.o: source/readkey.c
 addFunctions.o: source/addFunctions.c
 	gcc -c -o build/addFunctions.o source/addFunctions.c
 client:
-	gcc -Wall -o client build/main.o build/terminal.o build/bigChars.o build/readkey.o build/addFunctions.o -pthread
+	gcc -Wall -o client build/main.o build/terminal.o build/bigChars.o build/readkey.o build/addFunctions.o -pthread -g
 server:
-	gcc -Wall -o server source/finalserver.c -pthread
+	gcc -Wall -o server source/server.c -pthread -g
 clean:
 	rm -rf build/*.o
+	touch client
+	touch server
 	rm client
 	rm server

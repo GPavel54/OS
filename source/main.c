@@ -1,10 +1,9 @@
 #include "bigChars.h"
 #include "terminal.h"
 #include "readkey.h"
+#include <stdio.h>
 
-#define BUFFLEN 150
 const char _DEFAULT_PORT[5] = "7777";
-const char _CHAT_PORT[5] = "7778";
 
 
 int main(int argc, char ** argv){	
@@ -15,6 +14,9 @@ int main(int argc, char ** argv){
         char s[INET6_ADDRSTRLEN];
 	int sockfd = connectToServer(argv[1], s, _DEFAULT_PORT);
 	char buffer[BUFFLEN];
+	char ** allChat;
+	int messages = 0;
+	char myMessage[CHATBUF];
 	int ans = -1;
 	int rcvbytes = 0;
 
@@ -65,7 +67,7 @@ int main(int argc, char ** argv){
 	//******
 	//after create or connect to game
 	int iam;
-        rcvbytes = recv(sockfd, buffer, 150, 0);
+        rcvbytes = recv(sockfd, buffer, BUFFLEN, 0);
         if (rcvbytes == 0){
 	    printf("Server down...\n");
 	    return 0;
@@ -75,16 +77,18 @@ int main(int argc, char ** argv){
 	  iam = 1;
 	else
 	  iam = 2;
-        struct board sb = {{0}}, myb = {{0}};
+        struct board sb = {{0}};
         mt_clrscr();
-	int a;
+	int a, needtosend = 0, read = 0;
 	char answer = '\0';
 	struct cursor cursor;
 	cursor.p = 0;
 	int myturn = 3;
 	retPos(cursor.p, &(cursor.x), &(cursor.y));
-	pthread_t thread;
-	pthread_mutex_t mt = PTHREAD_MUTEX_INITIALIZER;
+	pthread_t thread, thread_c;
+	pthread_mutex_t mt = PTHREAD_MUTEX_INITIALIZER, cmt = PTHREAD_MUTEX_INITIALIZER;
+	struct ftc chat = {myMessage, &cmt, &read};
+	pthread_create(&thread_c, NULL, chatThread, (void *) &chat);
 	struct ft ft;
 	ft.b = &sb;
 	ft.sockfd = sockfd;
@@ -94,6 +98,19 @@ int main(int argc, char ** argv){
 	struct timeval tv1, tv2;
 	gettimeofday(&tv1, NULL);
 	while (1){
+	  if (read == 1){
+	  	messages++;
+	  	pthread_mutex_lock(&cmt);
+	  	allChat = realloc(allChat, sizeof(char *) * messages);
+	  	allChat[messages - 1] = malloc(sizeof(char) * CHATBUF);
+	  	for (int i = 0; i < CHATBUF; i++)
+	  		allChat[messages - 1][i] = '\0';
+	  	strcat(allChat[messages - 1], "\033[1;31mEnemy: \033[0m");
+	    strcat(allChat[messages - 1], myMessage);
+	  	read = 0;
+	  	pthread_mutex_unlock(&cmt);
+	    allChat[messages - 1][59] = '\0';
+	  }
 	  gettimeofday(&tv2, NULL);
 	  if (tv2.tv_sec - tv1.tv_sec > 2){
 	    gettimeofday(&tv1, NULL);
@@ -102,6 +119,7 @@ int main(int argc, char ** argv){
 	  }
 	  printBoard(sb);
 	  printCursor(cursor, sb);
+	  printChat(allChat, messages);
 	  if (sb.b[9] != 0)
 	    break;
 	  if (myturn == 1){
@@ -137,42 +155,65 @@ int main(int argc, char ** argv){
 	      break;
 	    case KEY_f5:
 	      if ((sb.b[cursor.p] == 0) && (iam == 1) && (myturn == 1)){
-		printSym(cursor, 1, &sb);
-		printf("\a");
+			printSym(cursor, 1, &sb);
+			printf("\a");
+			needtosend = 1;
 	      }else if (myturn != 1){
-		mt_gotoXY(1,29);
-		printf("It's not your turn..");
+			mt_gotoXY(1,29);
+			printf("It's not your turn..");
 	      }
 	      else if (iam == 2){
-		mt_gotoXY(1,29);
-		printf("You are playing for O ..");
+			mt_gotoXY(1,29);
+			printf("You are playing for O ..");
 	      }
 	      break;
 	    case KEY_f6:
 	      if ((sb.b[cursor.p] == 0) && (iam == 2) && (myturn == 1)){
-		printSym(cursor, 2, &sb);
-		printf("\a");
+			printSym(cursor, 2, &sb);
+			printf("\a");
+			needtosend = 1;
 	      }
 	      else if (myturn != 1){
-		mt_gotoXY(1,29);
-		printf("It's not your turn..");
+			mt_gotoXY(1,29);
+			printf("It's not your turn..");
 	      }
 	      else if (iam == 1){
-		mt_gotoXY(1,29);
-		printf("You are playing for X ..");
+			mt_gotoXY(1,29);
+			printf("You are playing for X ..");
 	      }
 	      break;
+	    case KEY_t:
+	      pthread_mutex_lock(&cmt);
+	      mt_gotoXY(1, 30);
+	      fgets(myMessage, CHATBUF, stdin);
+	      messages++;
+	      allChat = realloc(allChat, sizeof(char *) * messages);
+	  	  allChat[messages - 1] = malloc(sizeof(char) * CHATBUF);
+	  	  for (int i = 0; i < CHATBUF; i++)
+	  	    allChat[messages - 1][i] = '\0';
+	      read = 2;
+	      strcat(allChat[messages - 1], "\033[1;34mMe: \033[0m");
+	      strcat(allChat[messages - 1], myMessage);
+	      pthread_mutex_unlock(&cmt);
+	      mt_gotoXY(1, 30);
+	      printf("                      ");
+	      break;
 	    }
-	    if (((a == KEY_f6) && (iam == 2) || (a == KEY_f5) && (iam == 1)) && (myturn == 1)){
+	    if (needtosend == 1){
 	      pthread_mutex_lock(&mt);
 	      myturn = 2;
 	      pthread_mutex_unlock(&mt);
-	      printBoard(myb);
-	      printCursor(cursor, sb); 
+	      printBoard(sb);
+	      printCursor(cursor, sb);
+	      needtosend = 0;
 	    }
 	}
 	printBoard(sb);
 	mt_gotoXY(1,29);
-	printf("Game over, the winner is %d\n", sb.b[9]);
+	char winner[][20] = {"first player", "second player"};
+	if (sb.b[9] != 3)
+	  printf("Game over, the winner is %s\n", winner[sb.b[9] - 1]);
+	else
+	  printf("Game over. Draw.\n");
 	close(sockfd);
 }

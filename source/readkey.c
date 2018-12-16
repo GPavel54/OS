@@ -29,6 +29,8 @@ int rk_readkey(int *key){
 		*key = KEY_right;
 	else if (strcmp(buf, "\033[D") == 0)
 		*key = KEY_left;
+	else if (strcmp(buf, "t") == 0)
+		*key = KEY_t;
 	else
 		*key = KEY_another;
 	if (tcsetattr(STDIN_FILENO, TCSANOW, &def_opt) != 0)
